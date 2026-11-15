@@ -1,0 +1,6 @@
+{
+  "name": "MNS Fashion Brand",
+  "description": "Luxury modern fashion e-commerce platform for MNS Fashion Brand (Palashbari, Gaibandha, Bangladesh) featuring Men's, Women's, Kids, Panjabi, Footwear & Accessories, Bangladesh payment architecture, order tracking, and full admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

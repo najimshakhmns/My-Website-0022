@@ -1,0 +1,679 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import type {
+  AdminActivityLog,
+  AdminUser,
+  AppNotification,
+  CartItem,
+  Category,
+  CustomerUser,
+  Order,
+  PaymentRecord,
+  PaymentSettings,
+  Product,
+  ProductReview,
+  WebsiteSettings,
+} from '../src/types.ts';
+
+export interface StoredCustomer extends CustomerUser {
+  passwordHash: string;
+  tokenVersion: number;
+}
+
+export interface StoredAdmin extends AdminUser {
+  passwordHash: string;
+  tokenVersion: number;
+}
+
+export interface StoredPaymentSecrets {
+  bkashAppKey?: string;
+  bkashAppSecret?: string;
+  bkashUsername?: string;
+  bkashPassword?: string;
+  nagadPublicKey?: string;
+  nagadPrivateKey?: string;
+  rocketApiKey?: string;
+  rocketSecret?: string;
+}
+
+export interface StoredPasswordReset {
+  id: string;
+  identifier: string;
+  userId: string | null;
+  otpHash: string;
+  expiresAt: number;
+  attempts: number;
+  used: boolean;
+  createdAt: string;
+}
+
+export interface DatabaseSchema {
+  users: StoredCustomer[];
+  admins: StoredAdmin[];
+  categories: Category[];
+  products: Product[];
+  carts: Record<string, CartItem[]>;
+  wishlists: Record<string, string[]>;
+  orders: Order[];
+  payments: PaymentRecord[];
+  notifications: AppNotification[];
+  reviews: ProductReview[];
+  passwordResets: StoredPasswordReset[];
+  websiteSettings: WebsiteSettings;
+  paymentSettings: PaymentSettings;
+  paymentSecrets: StoredPaymentSecrets;
+  adminActivityLogs: AdminActivityLog[];
+  newsletterSubscribers: { id: string; email: string; createdAt: string }[];
+  orderSequence: number;
+}
+
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+const DB_FILE = path.join(DATA_DIR, 'mns-db.json');
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function createInitialData(): DatabaseSchema {
+  const ts = nowIso();
+
+  const categories: Category[] = [
+    {
+      id: 'cat-panjabi',
+      name: 'Panjabi',
+      nameBn: 'পাঞ্জাবি',
+      slug: 'panjabi',
+      description: 'Signature cotton-silk & embroidered Bangladeshi Panjabis',
+      image: 'media:panjabi',
+      displayOrder: 1,
+      isActive: true,
+    },
+    {
+      id: 'cat-men',
+      name: "Men's Fashion",
+      nameBn: 'পুরুষদের ফ্যাশন',
+      slug: 'mens-fashion',
+      description: 'Structured tailoring, overshirts, and contemporary menswear',
+      image: 'media:mens',
+      displayOrder: 2,
+      isActive: true,
+    },
+    {
+      id: 'cat-women',
+      name: "Women's Fashion",
+      nameBn: 'নারীদের ফ্যাশন',
+      slug: 'womens-fashion',
+      description: 'Handloom silk sarees, contemporary drapes & luxury ensembles',
+      image: 'media:womens',
+      displayOrder: 3,
+      isActive: true,
+    },
+    {
+      id: 'cat-kids',
+      name: 'Kids Fashion',
+      nameBn: 'শিশুদের ফ্যাশন',
+      slug: 'kids-fashion',
+      description: 'Breathable organic linen & festive kids ethnic wear',
+      image: 'media:kids',
+      displayOrder: 4,
+      isActive: true,
+    },
+    {
+      id: 'cat-shirts',
+      name: 'Shirts',
+      nameBn: 'শার্ট',
+      slug: 'shirts',
+      description: 'Crisp Oxford, linen, and formal tailored shirts',
+      image: 'media:mens',
+      displayOrder: 5,
+      isActive: true,
+    },
+    {
+      id: 'cat-tshirts',
+      name: 'T-Shirts',
+      nameBn: 'টি-শার্ট',
+      slug: 't-shirts',
+      description: 'Heavyweight 240gsm combed-cotton essential tees',
+      image: 'media:mens',
+      displayOrder: 6,
+      isActive: true,
+    },
+    {
+      id: 'cat-trousers',
+      name: 'Jeans & Trousers',
+      nameBn: 'জিন্স ও ট্রাউজার',
+      slug: 'jeans-trousers',
+      description: 'Selvedge denim & tailored pleated chinos',
+      image: 'media:mens',
+      displayOrder: 7,
+      isActive: true,
+    },
+    {
+      id: 'cat-shoes',
+      name: 'Shoes',
+      nameBn: 'জুতা',
+      slug: 'shoes',
+      description: 'Handcrafted full-grain leather loafers & Chelsea boots',
+      image: 'media:shoes',
+      displayOrder: 8,
+      isActive: true,
+    },
+    {
+      id: 'cat-accessories',
+      name: 'Accessories',
+      nameBn: 'এক্সেসরিজ',
+      slug: 'accessories',
+      description: 'Chronograph watches, calfskin belts & leather goods',
+      image: 'media:accessories',
+      displayOrder: 9,
+      isActive: true,
+    },
+  ];
+
+  const products: Product[] = [
+    {
+      id: 'prod-101',
+      name: 'Nawab Obsidian Embroidered Panjabi',
+      nameBn: 'নবাব অবসিডিয়ান এমব্রয়ডারি পাঞ্জাবি',
+      slug: 'nawab-obsidian-embroidered-panjabi',
+      sku: 'MNS-PNJ-001',
+      categoryId: 'cat-panjabi',
+      categorySlug: 'panjabi',
+      brand: 'MNS Atelier',
+      description:
+        'Crafted from breathable Bangladeshi Rajshahi cotton-silk blend with fine tonal champagne-gold collar and placket embroidery. Tailored for festive evenings and modern heritage occasions.',
+      descriptionBn:
+        'শ্বাসপ্রশ্বাসযোগ্য রাজশাহী কটন-সিল্ক ব্লেন্ডে তৈরি সূক্ষ্ম সোনালি এমব্রয়ডারি যুক্ত প্রিমিয়াম পাঞ্জাবি।',
+      fabricAndCare: '70% Combed Cotton, 30% Mulberry Silk · Dry clean recommended.',
+      regularPrice: 4850,
+      salePrice: 3950,
+      stock: 28,
+      sizes: ['S', 'M', 'L', 'XL', 'XXL'],
+      colors: ['Obsidian Black', 'Midnight Navy', 'Ivory'],
+      images: ['media:panjabi', 'media:hero'],
+      isFeatured: true,
+      isBestSeller: true,
+      isNewArrival: true,
+      isVisible: true,
+      rating: 4.9,
+      reviewCount: 2,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-102',
+      name: 'Palashbari Handloom Champagne Silk Ensemble',
+      nameBn: 'পলাশবাড়ী হ্যান্ডলুম শ্যাম্পেন সিল্ক ড্রেস',
+      slug: 'palashbari-handloom-champagne-silk-ensemble',
+      sku: 'MNS-WMN-002',
+      categoryId: 'cat-women',
+      categorySlug: 'womens-fashion',
+      brand: 'MNS Couture',
+      description:
+        'An architectural contemporary drape woven in soft champagne gold and charcoal silk-muslin. Features hand-finished zari borders and tailored silhouette.',
+      descriptionBn:
+        'শ্যাম্পেন গোল্ড ও চারকোল হ্যান্ডলুম সিল্ক-মসলিনে তৈরি আধুনিক এলিগ্যান্ট ড্রেস।',
+      fabricAndCare: '100% Pure Handloom Silk Blend · Gentle steam & dry clean.',
+      regularPrice: 8900,
+      salePrice: 7450,
+      stock: 14,
+      sizes: ['S', 'M', 'L', 'XL'],
+      colors: ['Champagne Gold', 'Charcoal'],
+      images: ['media:womens', 'media:hero'],
+      isFeatured: true,
+      isBestSeller: true,
+      isNewArrival: true,
+      isVisible: true,
+      rating: 4.8,
+      reviewCount: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-103',
+      name: 'Dhaka Noir Tailored Wool-Blend Overshirt',
+      nameBn: 'ঢাকা নয়ার টেইলার্ড ওভারশার্ট',
+      slug: 'dhaka-noir-tailored-overshirt',
+      sku: 'MNS-MEN-003',
+      categoryId: 'cat-men',
+      categorySlug: 'mens-fashion',
+      brand: 'MNS Atelier',
+      description:
+        'Minimalist structured overshirt with matte horn buttons, twin utility chest pockets, and clean architectural drape designed for year-round layering.',
+      descriptionBn:
+        'ম্যাট হর্ন বাটন ও স্ট্রাকচার্ড কাটিং সহ আধুনিক মিনিমালিস্ট ওভারশার্ট।',
+      fabricAndCare: '65% Fine Cotton Twill, 35% Viscose · Machine wash cold gentle.',
+      regularPrice: 3800,
+      salePrice: 3250,
+      stock: 34,
+      sizes: ['M', 'L', 'XL', 'XXL'],
+      colors: ['Jet Black', 'Slate Charcoal'],
+      images: ['media:mens', 'media:hero'],
+      isFeatured: true,
+      isBestSeller: true,
+      isNewArrival: false,
+      isVisible: true,
+      rating: 4.7,
+      reviewCount: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-104',
+      name: 'Heritage Linen Kids Kurta & Waistcoat Set',
+      nameBn: 'হেরিটেজ লিনেন কিডস কুর্তা ও কোটি সেট',
+      slug: 'heritage-linen-kids-kurta-waistcoat-set',
+      sku: 'MNS-KID-004',
+      categoryId: 'cat-kids',
+      categorySlug: 'kids-fashion',
+      brand: 'MNS Junior',
+      description:
+        'Ultra-soft organic ivory cotton kurta paired with a woven sand linen waistcoat featuring coconut shell buttons. Gentle on young skin for celebrations.',
+      descriptionBn:
+        'নরম অর্গানিক কটন কুর্তা ও স্যান্ড লিনেন কোটি সেট, শিশুদের আরামের জন্য বিশেষভাবে তৈরি।',
+      fabricAndCare: '100% Organic Cotton & Linen · Gentle wash.',
+      regularPrice: 2650,
+      salePrice: 2190,
+      stock: 22,
+      sizes: ['2-3Y', '4-5Y', '6-7Y', '8-10Y'],
+      colors: ['Sand Ivory', 'Warm Beige'],
+      images: ['media:kids'],
+      isFeatured: true,
+      isBestSeller: false,
+      isNewArrival: true,
+      isVisible: true,
+      rating: 4.9,
+      reviewCount: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-105',
+      name: 'Sovereign Full-Grain Leather Chelsea Boots',
+      nameBn: 'সভরিন ফুল-গ্রেইন লেদার চেলসি বুট',
+      slug: 'sovereign-leather-chelsea-boots',
+      sku: 'MNS-SHU-005',
+      categoryId: 'cat-shoes',
+      categorySlug: 'shoes',
+      brand: 'MNS Footwear',
+      description:
+        'Bench-crafted in small batches from supple Bangladeshi full-grain calfskin with Goodyear-welted stacked leather sole and brushed brass heel detail.',
+      descriptionBn:
+        'উন্নত মানের ফুল-গ্রেইন চামড়ায় হাতে তৈরি চেলসি বুট এবং লেদার সোল।',
+      fabricAndCare: '100% Full-Grain Calfskin Leather · Condition with neutral balm.',
+      regularPrice: 6800,
+      salePrice: 5750,
+      stock: 11,
+      sizes: ['40', '41', '42', '43', '44'],
+      colors: ['Obsidian Black', 'Espresso'],
+      images: ['media:shoes'],
+      isFeatured: true,
+      isBestSeller: true,
+      isNewArrival: true,
+      isVisible: true,
+      rating: 4.9,
+      reviewCount: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-106',
+      name: 'Aurelia Matte-Black & Gold Chronograph',
+      nameBn: 'অরেলিয়া ম্যাট-ব্ল্যাক ও গোল্ড ক্রোনোগ্রাফ ঘড়ি',
+      slug: 'aurelia-matte-black-gold-chronograph',
+      sku: 'MNS-ACC-006',
+      categoryId: 'cat-accessories',
+      categorySlug: 'accessories',
+      brand: 'MNS Horology',
+      description:
+        '40mm brushed gold PVD stainless steel case with sapphire-coated crystal, obsidian dial, and quick-release Italian suede-canvas strap.',
+      descriptionBn:
+        '৪০মিমি গোল্ড পিভিডি কেস এবং স্যাফায়ার কোটেড গ্লাস সমৃদ্ধ মিনিমালিস্ট লাক্সারি ঘড়ি।',
+      fabricAndCare: '316L Stainless Steel · 5ATM Water Resistant.',
+      regularPrice: 7500,
+      salePrice: 6200,
+      stock: 9,
+      sizes: ['One Size'],
+      colors: ['Black / Gold'],
+      images: ['media:accessories'],
+      isFeatured: true,
+      isBestSeller: true,
+      isNewArrival: false,
+      isVisible: true,
+      rating: 4.8,
+      reviewCount: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-107',
+      name: 'Atelier 240GSM Heavyweight Combed Tee',
+      nameBn: 'অ্যাটেলিয়ার ২৪০ জিএসএম হেভিওয়েট টি-শার্ট',
+      slug: 'atelier-240gsm-heavyweight-combed-tee',
+      sku: 'MNS-TSH-007',
+      categoryId: 'cat-tshirts',
+      categorySlug: 't-shirts',
+      brand: 'MNS Essentials',
+      description:
+        'Knit from 240gsm single-jersey Bangladeshi organic combed cotton with a structured rib collar and relaxed boxy drop-shoulder silhouette.',
+      descriptionBn:
+        '২৪০ জিএসএম অর্গানিক কম্বড কটনে তৈরি আরামদায়ক ও টেকসই প্রিমিয়াম টি-শার্ট।',
+      fabricAndCare: '100% Combed Organic Cotton · Cold wash inside out.',
+      regularPrice: 1450,
+      salePrice: 1150,
+      stock: 64,
+      sizes: ['S', 'M', 'L', 'XL', 'XXL'],
+      colors: ['Obsidian Black', 'Alabaster White', 'Charcoal'],
+      images: ['media:mens'],
+      isFeatured: false,
+      isBestSeller: true,
+      isNewArrival: true,
+      isVisible: true,
+      rating: 4.7,
+      reviewCount: 0,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-108',
+      name: 'Savile Slim Selvedge Chino Trousers',
+      nameBn: 'স্যভিল স্লিম সেলভেজ চিনো ট্রাউজার',
+      slug: 'savile-slim-selvedge-chino-trousers',
+      sku: 'MNS-TRS-008',
+      categoryId: 'cat-trousers',
+      categorySlug: 'jeans-trousers',
+      brand: 'MNS Atelier',
+      description:
+        'Tapered modern trousers cut from 2% stretch Japanese-milled cotton twill with concealed coin pocket and horn waist button.',
+      descriptionBn:
+        'স্ট্রেচ কটন টুইলে তৈরি স্মার্ট টেইলার্ড স্লিম ফিট ট্রাউজার।',
+      fabricAndCare: '98% Cotton, 2% Elastane · Machine wash gentle.',
+      regularPrice: 2850,
+      salePrice: 2450,
+      stock: 40,
+      sizes: ['30', '32', '34', '36', '38'],
+      colors: ['Midnight Black', 'Stone Khaki', 'Charcoal'],
+      images: ['media:mens'],
+      isFeatured: false,
+      isBestSeller: false,
+      isNewArrival: true,
+      isVisible: true,
+      rating: 4.6,
+      reviewCount: 0,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-109',
+      name: 'Imperial Oxford Button-Down Dress Shirt',
+      nameBn: 'ইম্পেরিয়াল অক্সফোর্ড ফরমাল শার্ট',
+      slug: 'imperial-oxford-button-down-shirt',
+      sku: 'MNS-SHT-009',
+      categoryId: 'cat-shirts',
+      categorySlug: 'shirts',
+      brand: 'MNS Atelier',
+      description:
+        'Two-ply Egyptian cotton Oxford weave featuring mother-of-pearl buttons, single-needle side seams, and structured collar roll.',
+      descriptionBn:
+        'টু-প্লাই ইজিপশিয়ান কটন ও মাদার-অব-পার্ল বাটন যুক্ত প্রিমিয়াম ফরমাল শার্ট।',
+      fabricAndCare: '100% Two-Ply Cotton Oxford · Steam iron medium.',
+      regularPrice: 2600,
+      salePrice: 2150,
+      stock: 30,
+      sizes: ['S', 'M', 'L', 'XL'],
+      colors: ['Crisp White', 'Charcoal', 'Champagne Sand'],
+      images: ['media:mens', 'media:hero'],
+      isFeatured: false,
+      isBestSeller: true,
+      isNewArrival: false,
+      isVisible: true,
+      rating: 4.8,
+      reviewCount: 0,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'prod-110',
+      name: 'Vanguard Hand-Stitched Penny Loafers',
+      nameBn: 'ভ্যানগার্ড হ্যান্ড-স্টিচড পেনি লোফার',
+      slug: 'vanguard-hand-stitched-penny-loafers',
+      sku: 'MNS-SHU-010',
+      categoryId: 'cat-shoes',
+      categorySlug: 'shoes',
+      brand: 'MNS Footwear',
+      description:
+        'Classic slip-on penny loafers crafted in full-grain black calfskin with hand-sewn apron stitching and cushioned leather footbed.',
+      descriptionBn:
+        'হ্যান্ড-সেউন স্টিচিং ও কুশনড লেদার ইনসোল সহ প্রিমিয়াম পেনি লোফার।',
+      fabricAndCare: '100% Calfskin Leather · Store with cedar shoe trees.',
+      regularPrice: 5400,
+      salePrice: 4650,
+      stock: 4,
+      sizes: ['40', '41', '42', '43'],
+      colors: ['Obsidian Black'],
+      images: ['media:shoes'],
+      isFeatured: false,
+      isBestSeller: false,
+      isNewArrival: true,
+      isVisible: true,
+      rating: 4.9,
+      reviewCount: 0,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+  ];
+
+  const reviews: ProductReview[] = [
+    {
+      id: 'rev-1',
+      productId: 'prod-101',
+      userId: 'demo-reviewer-1',
+      userName: 'Tanvir Ahmed (Dhaka)',
+      rating: 5,
+      comment: 'Exceptional cotton-silk drape and subtle gold embroidery. Received in Dhaka within 48 hours.',
+      verifiedPurchase: true,
+      createdAt: ts,
+    },
+    {
+      id: 'rev-2',
+      productId: 'prod-101',
+      userId: 'demo-reviewer-2',
+      userName: 'Rafiqul Islam (Bogura)',
+      rating: 5,
+      comment: 'Stitching quality matches international luxury labels. True to size L.',
+      verifiedPurchase: true,
+      createdAt: ts,
+    },
+    {
+      id: 'rev-3',
+      productId: 'prod-102',
+      userId: 'demo-reviewer-3',
+      userName: 'Nusrat Jahan (Chattogram)',
+      rating: 5,
+      comment: 'The champagne silk tone looks understated and refined under evening lighting.',
+      verifiedPurchase: true,
+      createdAt: ts,
+    },
+  ];
+
+  const websiteSettings: WebsiteSettings = {
+    companyName: 'MNS Fashion Brand',
+    tagline: 'Your Style, Your Identity.',
+    founderName: 'MD: Najim Shakh',
+    contactNumber: '01341422732',
+    email: 'najimshakh6166@gmail.com',
+    businessAddress: 'Palashbari, Gaibandha, Bangladesh',
+    logoText: 'MNS',
+    faviconUrl: '',
+    announcementBar: 'Welcome to MNS Fashion Brand – Discover Your Style. Free delivery above ৳5,000.',
+    announcementBarBn: 'এমএনএস ফ্যাশন ব্র্যান্ডে স্বাগতম – আপনার স্টাইল আবিষ্কার করুন। ৫,০০০৳+ অর্ডারে ফ্রি ডেলিভারি।',
+    heroHeadline: 'DEFINE YOUR STYLE. OWN YOUR IDENTITY.',
+    heroHeadlineBn: 'আপনার স্টাইল গড়ুন। নিজস্ব পরিচয় ধারণ করুন।',
+    heroDescription: 'Discover modern fashion collections designed for confidence, comfort and individuality.',
+    heroDescriptionBn: 'আত্মবিশ্বাস, আরাম এবং স্বকীয়তার জন্য তৈরি আধুনিক ফ্যাশন কালেকশন আবিষ্কার করুন।',
+    heroBannerImage: 'media:hero',
+    promoBannerTitle: 'The Heritage & Atelier Edit 2026',
+    promoBannerSubtitle: 'Curated in Palashbari, Gaibandha — crafted with Bangladeshi handloom heritage and modern tailoring.',
+    aboutUsContent:
+      'Founded by MD: Najim Shakh in Palashbari, Gaibandha, Bangladesh, MNS Fashion Brand bridges refined Bangladeshi craftsmanship with international minimalist tailoring. Every Panjabi, silk ensemble, structured overshirt, and handcrafted leather shoe is built around one ethos: Your Style, Your Identity.',
+    footerDescription:
+      'Modern Bangladeshi luxury fashion house crafting tailored menswear, handloom womenswear, kidswear, footwear, and accessories.',
+    socialLinks: {
+      facebook: 'https://facebook.com/mnsfashionbrand',
+      instagram: 'https://instagram.com/mnsfashionbrand',
+      youtube: 'https://youtube.com/@mnsfashionbrand',
+      whatsapp: 'https://wa.me/8801341422732',
+    },
+    colors: {
+      primaryBlack: '#111111',
+      luxuryGold: '#D4AF37',
+      darkBg: '#181818',
+    },
+    deliveryCharges: {
+      gaibandhaLocal: 50,
+      insideDhaka: 80,
+      outsideDhaka: 130,
+      freeShippingThreshold: 5000,
+    },
+    policies: {
+      shipping:
+        'Orders placed before 3:00 PM (Asia/Dhaka) dispatch the same business day from our Palashbari, Gaibandha fulfillment studio. Gaibandha local delivery takes 24 hours; Dhaka Metro 1–2 days; nationwide Bangladesh 2–4 business days.',
+      returns:
+        'Unworn items with original tags and packaging may be exchanged or returned within 7 days of delivery. Contact 01341422732 with your Order ID.',
+      privacy:
+        'Customer contact details and delivery addresses are strictly used for order fulfillment, invoice generation, and verified tracking updates. Passwords are cryptographically hashed and never accessible to staff.',
+      terms:
+        'All prices are listed in Bangladeshi Taka (BDT / ৳). Online mobile financial service transactions (bKash, Nagad, Rocket) undergo backend verification prior to shipment dispatch.',
+    },
+    navigationMenu: [
+      { label: 'Home', labelBn: 'হোম', target: '/' },
+      { label: 'Men', labelBn: 'পুরুষ', target: '/shop?cat=mens-fashion' },
+      { label: 'Women', labelBn: 'নারী', target: '/shop?cat=womens-fashion' },
+      { label: 'Kids', labelBn: 'শিশু', target: '/shop?cat=kids-fashion' },
+      { label: 'Collections', labelBn: 'কালেকশন', target: '/shop' },
+      { label: 'Track Order', labelBn: 'ট্র্যাক অর্ডার', target: '/track' },
+    ],
+    newsletterEnabled: true,
+  };
+
+  const paymentSettings: PaymentSettings = {
+    mode: 'demo',
+    bkash: {
+      enabled: true,
+      merchantNumber: '01341422732',
+      accountType: 'Merchant (Sandbox Demo)',
+      instructions:
+        'Open bKash App -> Make Payment -> Enter Merchant Number 01341422732 -> Enter Exact Total Amount -> Submit your 10-character TrxID below for backend verification.',
+      hasApiCredentials: false,
+    },
+    nagad: {
+      enabled: true,
+      merchantNumber: '01341422732',
+      accountType: 'Merchant (Sandbox Demo)',
+      instructions:
+        'Open Nagad App -> Merchant Pay -> Enter 01341422732 -> Confirm Amount -> Submit your Nagad Transaction ID below for verification.',
+      hasApiCredentials: false,
+    },
+    rocket: {
+      enabled: true,
+      merchantNumber: '013414227320',
+      accountType: 'DBBL Rocket Merchant (Sandbox Demo)',
+      instructions:
+        'Dial *322# or use Rocket App -> Merchant Pay -> Enter 013414227320 -> Submit your Transaction Reference ID below.',
+      hasApiCredentials: false,
+    },
+    cod: {
+      enabled: true,
+      instructions: 'Pay in cash upon parcel inspection & delivery anywhere in Bangladesh.',
+      maxOrderAmount: 25000,
+      insideDhakaOnly: false,
+    },
+  };
+
+  return {
+    users: [],
+    admins: [],
+    categories,
+    products,
+    carts: {},
+    wishlists: {},
+    orders: [],
+    payments: [],
+    notifications: [],
+    reviews,
+    passwordResets: [],
+    websiteSettings,
+    paymentSettings,
+    paymentSecrets: {},
+    adminActivityLogs: [],
+    newsletterSubscribers: [],
+    orderSequence: 1001,
+  };
+}
+
+let cachedDb: DatabaseSchema | null = null;
+
+function ensureDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+export function getDb(): DatabaseSchema {
+  if (cachedDb) return cachedDb;
+  ensureDir();
+  if (fs.existsSync(DB_FILE)) {
+    try {
+      const raw = fs.readFileSync(DB_FILE, 'utf8');
+      cachedDb = JSON.parse(raw) as DatabaseSchema;
+      return cachedDb;
+    } catch (err) {
+      console.error('Failed to read database file, reinitializing:', err);
+    }
+  }
+  cachedDb = createInitialData();
+  saveDb();
+  return cachedDb;
+}
+
+export function saveDb() {
+  if (!cachedDb) return;
+  ensureDir();
+  const tmpFile = `${DB_FILE}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(cachedDb, null, 2), 'utf8');
+  fs.renameSync(tmpFile, DB_FILE);
+}
+
+export function sanitizeCustomer(user: StoredCustomer): CustomerUser {
+  const { passwordHash: _ph, tokenVersion: _tv, ...rest } = user;
+  return rest;
+}
+
+export function sanitizeAdmin(admin: StoredAdmin): AdminUser {
+  const { passwordHash: _ph, tokenVersion: _tv, ...rest } = admin;
+  return rest;
+}
+
+export function logAdminAction(
+  admin: StoredAdmin,
+  action: string,
+  entityType: string,
+  entityId: string,
+  details: string
+) {
+  const db = getDb();
+  db.adminActivityLogs.unshift({
+    id: `log-${crypto.randomUUID().slice(0, 8)}`,
+    adminId: admin.id,
+    adminEmail: admin.email,
+    action,
+    entityType,
+    entityId,
+    details,
+    timestamp: nowIso(),
+  });
+  if (db.adminActivityLogs.length > 500) {
+    db.adminActivityLogs = db.adminActivityLogs.slice(0, 500);
+  }
+}
