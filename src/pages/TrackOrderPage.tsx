@@ -6,7 +6,7 @@ import { ORDER_STAGES, formatBDT, formatDateTimeBD } from '../lib/bangladesh.ts'
 import type { Order } from '../types.ts';
 
 export const TrackOrderPage: React.FC = () => {
-  const { route, language, notify } = useStore();
+  const { route, language, staticMode, notify } = useStore();
   const params = new URLSearchParams(route.split('?')[1] || '');
 
   const [orderId, setOrderId] = useState(params.get('orderId') || '');
@@ -17,6 +17,14 @@ export const TrackOrderPage: React.FC = () => {
 
   const performLookup = async (idToLookup: string, phoneToLookup: string) => {
     if (!idToLookup.trim() || !phoneToLookup.trim()) return;
+    if (staticMode) {
+      const msg =
+        'Order tracking requires the live MNS backend server. For assistance with an active order, please call or WhatsApp 01341422732.';
+      setTrackedOrder(null);
+      setErrorMsg(msg);
+      notify(msg, 'info');
+      return;
+    }
     setLoading(true);
     setErrorMsg('');
     try {

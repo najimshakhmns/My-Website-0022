@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const OFFICIAL_LOGO_PATH = '/assets/aistudio/image_be99a418.png';
+export const OFFICIAL_LOGO_PATH = './assets/aistudio/image_be99a418.png';
 
 interface BrandLogoProps {
   variant?: 'dark' | 'light';

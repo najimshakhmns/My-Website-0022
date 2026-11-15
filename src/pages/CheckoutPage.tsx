@@ -23,6 +23,7 @@ export const CheckoutPage: React.FC = () => {
     cart,
     products,
     user,
+    staticMode,
     websiteSettings,
     paymentSettings,
     clearCart,
@@ -119,6 +120,13 @@ export const CheckoutPage: React.FC = () => {
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (resolvedItems.length === 0) return;
+    if (staticMode) {
+      notify(
+        'Static catalog mode: live order creation & payment verification require the backend server. Contact 01341422732 on WhatsApp to confirm your order.',
+        'info'
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       const orderRes = await apiRequest<{ order: Order }>('/api/orders', {
@@ -451,6 +459,16 @@ export const CheckoutPage: React.FC = () => {
           Delivery & Bangladesh Payment
         </h1>
       </div>
+
+      {staticMode && (
+        <div className="mb-8 border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-950 flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5 text-amber-800" />
+          <div>
+            <strong className="font-semibold">Static Storefront Hosting:</strong> Online order persistence and server-side bKash/Nagad/Rocket verification require running the full-stack Express server. You can review your complete order total below or confirm directly via WhatsApp at{' '}
+            <span className="font-mono font-semibold">01341422732</span>.
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handlePlaceOrder} className="grid lg:grid-cols-12 gap-10 items-start">
         {/* Left: Shipping & Payment Selection */}

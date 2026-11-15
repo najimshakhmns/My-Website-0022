@@ -14,6 +14,42 @@ import { ForgotPasswordPage, LoginPage, RegisterPage } from './pages/AuthPages.t
 import { AccountPage } from './pages/AccountPage.tsx';
 import { AdminPage } from './pages/AdminPage.tsx';
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; message: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, message: error?.message || 'Unexpected rendering error' };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-white text-[#111111] p-6 text-center space-y-4">
+          <h1 className="font-serif text-3xl font-semibold">MNS Fashion Brand</h1>
+          <p className="text-sm text-neutral-600 max-w-md">{this.state.message}</p>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.hash = '';
+              window.location.href = './';
+            }}
+            className="px-6 py-2.5 bg-[#111111] text-white text-xs uppercase tracking-widest"
+          >
+            Reload Storefront
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const AppRouter: React.FC = () => {
   const { route, loading } = useStore();
   const pathname = route.split('?')[0];
@@ -69,8 +105,10 @@ const AppRouter: React.FC = () => {
 
 export default function App() {
   return (
-    <StoreProvider>
-      <AppRouter />
-    </StoreProvider>
+    <ErrorBoundary>
+      <StoreProvider>
+        <AppRouter />
+      </StoreProvider>
+    </ErrorBoundary>
   );
 }

@@ -1601,6 +1601,12 @@ async function startServer() {
   // =========================================================
   // VITE / STATIC SERVING
   // =========================================================
+  app.get(/\/assets\/aistudio\/([^/]+)$/, (req, res, next) => {
+    const file = path.resolve(process.cwd(), 'public/assets/aistudio', req.params[0]);
+    if (fs.existsSync(file)) return res.sendFile(file);
+    next();
+  });
+
   const isProd = process.env.NODE_ENV === 'production';
   if (!isProd) {
     const vite = await createViteServer({
@@ -1610,6 +1616,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(process.cwd(), 'dist');
+    app.use(/.*\/assets/, express.static(path.join(distDir, 'assets')));
     app.use(express.static(distDir));
     app.get('*', (_req, res) => {
       const indexFile = path.join(distDir, 'index.html');
